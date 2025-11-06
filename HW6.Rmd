@@ -1,0 +1,125 @@
+---
+title: "Age and Education Differences Among Couples"
+author: "Ava Droznik"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = TRUE, warning = TRUE, results = "markup")
+library(AER)
+library(modelsummary)
+library(tidyverse)
+library(forcats)
+load("/Users/avadroznik/Downloads/ACS_2021_couples.RData")
+```
+
+```{r}
+acs2021_couples$educ_numeric <- fct_recode(acs2021_couples$EDUC,
+                                           "0" = "N/A or no schooling",
+                                           "2" = "Nursery school to grade 4",
+                                           "6.5" = "Grade 5, 6, 7, or 8",
+                                           "9" = "Grade 9",
+                                           "10" = "Grade 10",
+                                           "11" = "Grade 11",
+                                           "12" = "Grade 12",
+                                           "13" = "1 year of college",
+                                           "14" = "2 years of college",
+                                           "15" = "3 years of college",
+                                           "16" = "4 years of college",
+                                           "17" = "5+ years of college")
+
+acs2021_couples$educ_numeric <- as.numeric(levels(acs2021_couples$educ_numeric))[acs2021_couples$educ_numeric]
+
+acs2021_couples$h_educ_numeric <- fct_recode(acs2021_couples$h_educ,
+                                           "0" = "N/A or no schooling",
+                                           "2" = "Nursery school to grade 4",
+                                           "6.5" = "Grade 5, 6, 7, or 8",
+                                           "9" = "Grade 9",
+                                           "10" = "Grade 10",
+                                           "11" = "Grade 11",
+                                           "12" = "Grade 12",
+                                           "13" = "1 year of college",
+                                           "14" = "2 years of college",
+                                           "15" = "3 years of college",
+                                           "16" = "4 years of college",
+                                           "17" = "5+ years of college")
+
+acs2021_couples$h_educ_numeric <- as.numeric(levels(acs2021_couples$h_educ_numeric))[acs2021_couples$h_educ_numeric]
+
+acs2021_couples$educ_diff <- acs2021_couples$educ_numeric - acs2021_couples$h_educ_numeric
+```
+
+```{r}
+# Hypothesis:
+
+# H0: β2 = β3 = 0 (the squared and cubic terms of education difference have no joint effect)
+
+# HA: At least one of β2, β3 ≠ 0 (nonlinear relationship between age and education differences)
+```
+
+```{r}
+# Model 1: Simple linear relationship between age and education differences
+
+m1 <- lm(age_diff ~ educ_diff, data = acs2021_couples)
+
+# Model 2: Add nonlinear terms for education difference
+
+m2 <- lm(age_diff ~ educ_diff + I(educ_diff^2) + I(educ_diff^3),
+data = acs2021_couples)
+
+# Model 3: Add partner controls (ages and education levels)
+
+acs2021_couples$avg_age <- (acs2021_couples$AGE + acs2021_couples$h_age) / 2
+
+m3 <- lm(age_diff ~ educ_diff + I(educ_diff^2) + I(educ_diff^3) +
+                    avg_age + I(avg_age^2),
+         data = acs2021_couples)
+```
+
+```{r}
+# Robust coefficient test for Model 1
+
+coeftest(m1, vcov = vcovHC)
+
+# Wald test for nonlinearity (do polynomial terms jointly matter?)
+
+waldtest(m1, m2, vcov = vcovHC)
+
+# Wald test for additional age/education controls
+
+waldtest(m2, m3, vcov = vcovHC)
+
+```
+
+```{r}
+models <- list(
+  "M 1" = lm(age_diff ~ educ_diff, data = acs2021_couples),
+  "M 2" = lm(age_diff ~ educ_diff + I(educ_diff^2) + I(educ_diff^3),
+             data = acs2021_couples),
+  "M 3" = lm(age_diff ~ educ_diff + I(educ_diff^2) + I(educ_diff^3) +
+                       avg_age + I(avg_age^2),
+             data = acs2021_couples)
+)
+
+modelsummary(models, stars = TRUE, output = "kableExtra")
+
+```
+
+```{r}
+# Predicted values from Model 2
+
+plot_data <- acs2021_couples %>%
+mutate(pred_age_diff = predict(m2))
+
+ggplot(plot_data, aes(x = educ_diff, y = age_diff)) +
+geom_point(alpha = 0.1, color = "gray60") +
+geom_line(aes(y = pred_age_diff), color = "blue", linewidth = 1.1) +
+theme_minimal() +
+labs(
+title = "Relationship Between Education Difference and Age Difference",
+subtitle = "Predicted values from polynomial model (M2)",
+x = "Education Difference (years of schooling)",
+y = "Age Difference (years)"
+)
+
+```
